@@ -1,0 +1,11 @@
+.env
+.env.*
+.git
+.claude
+__pycache__
+*.pyc
+*.bak
+README.md
+Dockerfile
+.dockerignore
+railway.json

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0f">
+  <title>whatkilled.me</title>
+  <meta name="description" content="Paste a Warcraft Logs link and see exactly what killed your tank, pull by pull.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23ff4d5e' d='M16 2 28 16 16 30 4 16z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="is-landing">
+  <div class="backdrop" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>whatkilled<span class="brand-tld">.me</span></span>
+      </a>
+      <span class="site-note">Blood DK today, more tanks soon</span>
+      <a class="button-ghost" id="new-log" href="/" hidden>New log</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro" id="intro">
+      <h1>What killed you<span class="accent">?</span></h1>
+      <p class="lede">Paste a Warcraft Logs link. See the exact moment the pull fell apart, and which cooldowns weren't there when you needed them.</p>
+    </section>
+
+    <form class="search" id="search-form">
+      <label class="visually-hidden" for="report-url">Warcraft Logs report link</label>
+      <div class="search-row">
+        <input id="report-url" name="url" type="text" autocomplete="off" spellcheck="false"
+               placeholder="https://www.warcraftlogs.com/reports/...">
+        <button type="submit" class="button-primary">Find out</button>
+      </div>
+    </form>
+
+    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+    <div id="error" class="notice notice-error" role="alert" hidden></div>
+    <div id="skeleton" class="skeleton" aria-hidden="true" hidden>
+      <div class="skeleton-block skeleton-hero"></div>
+      <div class="skeleton-row">
+        <div class="skeleton-block"></div>
+        <div class="skeleton-block"></div>
+        <div class="skeleton-block"></div>
+        <div class="skeleton-block"></div>
+      </div>
+      <div class="skeleton-block skeleton-chart"></div>
+    </div>
+    <section id="picker" hidden></section>
+    <section id="results" hidden></section>
+
+    <section class="how" id="how">
+      <div class="how-card">
+        <span class="how-index">01</span>
+        <strong>The verdict first</strong>
+        <p>Plain answers about what went wrong, before you read a single table.</p>
+      </div>
+      <div class="how-card">
+        <span class="how-index">02</span>
+        <strong>Every cooldown, in context</strong>
+        <p>Defensives and crowd control lined up against each pull and death.</p>
+      </div>
+      <div class="how-card">
+        <span class="how-index">03</span>
+        <strong>Compare your attempts</strong>
+        <p>Put the same pack from two fights side by side and see what changed.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    Works with public logs. whatkilled.me isn't affiliated with Warcraft Logs or Blizzard Entertainment.
+  </footer>
+
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
