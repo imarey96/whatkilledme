@@ -11,7 +11,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py analyze_blood.py main.py analyzer.py wcl_client.py ./
+COPY app.py analyze.py tanks.py wcl_client.py ./
 COPY static ./static
 
 RUN useradd --create-home --uid 10001 appuser

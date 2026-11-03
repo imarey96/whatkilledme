@@ -1,6 +1,30 @@
 """Warcraft Logs API v2 client using OAuth2 client credentials + GraphQL."""
 
+import os
+import re
+
 import requests
+
+
+def load_env():
+    """Load .env file if it exists (simple key=value parser)."""
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ.setdefault(key.strip(), value.strip())
+
+
+def extract_report_code(url_or_code: str) -> str:
+    """Extract report code from a URL or return as-is if already a code."""
+    match = re.search(r"warcraftlogs\.com/reports/((?:a:)?[A-Za-z0-9]+)", url_or_code)
+    if match:
+        return match.group(1)
+    # Strip any URL fragments like #fight=...
+    return url_or_code.split("#")[0].split("?")[0].strip()
 
 
 class WCLClient:
@@ -68,6 +92,14 @@ class WCLClient:
                             difficulty
                             encounterID
                             keystoneLevel
+                            fightPercentage
+                        }
+                        phases {
+                            encounterID
+                            phases {
+                                id
+                                name
+                            }
                         }
                         masterData(translate: true) {
                             actors {
@@ -89,56 +121,6 @@ class WCLClient:
         """, {"code": report_code})
         return result["reportData"]["report"]
 
-    def get_cast_events(
-        self,
-        report_code: str,
-        fight_id: int,
-        source_id: int,
-        start_time: float,
-        end_time: float,
-    ) -> list[dict]:
-        """Fetch all cast events for a player in a fight, handling pagination."""
-        all_events = []
-        current_start = start_time
-
-        while True:
-            result = self.query("""
-                query($code: String!, $startTime: Float!, $endTime: Float!,
-                      $fightIDs: [Int!], $sourceID: Int!) {
-                    reportData {
-                        report(code: $code) {
-                            events(
-                                startTime: $startTime
-                                endTime: $endTime
-                                fightIDs: $fightIDs
-                                dataType: Casts
-                                sourceID: $sourceID
-                                limit: 10000
-                                includeResources: true
-                            ) {
-                                data
-                                nextPageTimestamp
-                            }
-                        }
-                    }
-                }
-            """, {
-                "code": report_code,
-                "startTime": current_start,
-                "endTime": end_time,
-                "fightIDs": [fight_id],
-                "sourceID": source_id,
-            })
-
-            events_data = result["reportData"]["report"]["events"]
-            all_events.extend(events_data["data"])
-
-            if events_data["nextPageTimestamp"] is None:
-                break
-            current_start = events_data["nextPageTimestamp"]
-
-        return all_events
-
     def get_events(
         self,
         report_code: str,
@@ -148,6 +130,7 @@ class WCLClient:
         end_time: float,
         source_id: int | None = None,
         hostility: str = "Friendlies",
+        target_id: int | None = None,
     ) -> list[dict]:
         """Fetch all events of any type in a fight, handling pagination."""
         all_events = []
@@ -156,7 +139,7 @@ class WCLClient:
         while True:
             result = self.query("""
                 query($code: String!, $startTime: Float!, $endTime: Float!,
-                      $fightIDs: [Int!], $sourceID: Int,
+                      $fightIDs: [Int!], $sourceID: Int, $targetID: Int,
                       $dataType: EventDataType, $hostility: HostilityType) {
                     reportData {
                         report(code: $code) {
@@ -167,6 +150,7 @@ class WCLClient:
                                 dataType: $dataType
                                 sourceID: $sourceID
                                 hostilityType: $hostility
+                                targetID: $targetID
                                 limit: 10000
                                 includeResources: true
                             ) {
@@ -184,6 +168,7 @@ class WCLClient:
                 "sourceID": source_id,
                 "dataType": data_type,
                 "hostility": hostility,
+                "targetID": target_id,
             })
 
             events_data = result["reportData"]["report"]["events"]
@@ -196,7 +181,7 @@ class WCLClient:
         return all_events
 
     def get_fight_details(self, report_code: str, fight_id: int) -> dict:
-        """Fetch one fight with its keystone info and dungeon pulls."""
+        """Fetch one fight with its keystone info, dungeon pulls and raid phases."""
         result = self.query("""
             query($code: String!, $fightIDs: [Int!]) {
                 reportData {
@@ -207,14 +192,21 @@ class WCLClient:
                             startTime
                             endTime
                             kill
+                            difficulty
+                            encounterID
                             keystoneLevel
                             averageItemLevel
+                            fightPercentage
                             dungeonPulls {
                                 id
                                 name
                                 startTime
                                 endTime
                                 kill
+                            }
+                            phaseTransitions {
+                                id
+                                startTime
                             }
                         }
                     }
@@ -240,86 +232,3 @@ class WCLClient:
             }
         """, {"code": report_code, "fightIDs": [fight_id]})
         return result["reportData"]["report"]["table"]["data"]
-
-    def get_damage_done_table(
-        self,
-        report_code: str,
-        fight_id: int,
-        source_id: int,
-        start_time: float,
-        end_time: float,
-    ) -> dict:
-        """Fetch the damage-done table for a player, broken down by target."""
-        result = self.query("""
-            query($code: String!, $startTime: Float!, $endTime: Float!,
-                  $fightIDs: [Int!], $sourceID: Int!) {
-                reportData {
-                    report(code: $code) {
-                        table(
-                            startTime: $startTime
-                            endTime: $endTime
-                            fightIDs: $fightIDs
-                            dataType: DamageDone
-                            sourceID: $sourceID
-                            hostilityType: Enemies
-                        )
-                    }
-                }
-            }
-        """, {
-            "code": report_code,
-            "startTime": start_time,
-            "endTime": end_time,
-            "fightIDs": [fight_id],
-            "sourceID": source_id,
-        })
-        return result["reportData"]["report"]["table"]["data"]
-
-    def get_damage_by_target(
-        self,
-        report_code: str,
-        fight_id: int,
-        source_id: int,
-        start_time: float,
-        end_time: float,
-    ) -> dict:
-        """Fetch damage-done events and aggregate by target."""
-        all_events = []
-        current_start = start_time
-
-        while True:
-            result = self.query("""
-                query($code: String!, $startTime: Float!, $endTime: Float!,
-                      $fightIDs: [Int!], $sourceID: Int!) {
-                    reportData {
-                        report(code: $code) {
-                            events(
-                                startTime: $startTime
-                                endTime: $endTime
-                                fightIDs: $fightIDs
-                                dataType: DamageDone
-                                sourceID: $sourceID
-                                limit: 10000
-                            ) {
-                                data
-                                nextPageTimestamp
-                            }
-                        }
-                    }
-                }
-            """, {
-                "code": report_code,
-                "startTime": current_start,
-                "endTime": end_time,
-                "fightIDs": [fight_id],
-                "sourceID": source_id,
-            })
-
-            events_data = result["reportData"]["report"]["events"]
-            all_events.extend(events_data["data"])
-
-            if events_data["nextPageTimestamp"] is None:
-                break
-            current_start = events_data["nextPageTimestamp"]
-
-        return all_events

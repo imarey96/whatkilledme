@@ -16,6 +16,7 @@
   --glow: rgba(255, 77, 94, 0.28);
   --series-1: #6a87fb;
   --series-2: #e0642a;
+  --series-3: #2f9e7e;
   --band: rgba(255, 255, 255, 0.03);
   --good: #34d27b;
   --warning: #fab219;
@@ -579,6 +580,7 @@ rect.mark-hit:hover { fill: rgba(255, 255, 255, 0.035); }
 
 .key-1 { background: var(--series-1); }
 .key-2 { background: var(--series-2); }
+.key-3 { background: var(--series-3); }
 .key-death { background: var(--critical); border-radius: 3px; }
 
 details { margin-top: 14px; color: var(--ink-2); font-size: 14px; }

@@ -2,6 +2,7 @@
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const REQUEST_TIMEOUT_MS = 180000;
+const SECTION_WORDS = { pull: ["Pull", "pull"], phase: ["Phase", "phase"], window: ["Stretch", "30 seconds"] };
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -130,7 +131,13 @@ function usableFights() {
 }
 
 function fightLabel(f) {
-  return f.keystone ? `${f.name} +${f.keystone}` : f.name;
+  if (f.keystone) return `${f.name} +${f.keystone}`;
+  return f.difficulty ? `${f.difficulty} ${f.name}` : f.name;
+}
+
+function fightResult(f) {
+  if (f.kill) return "Kill";
+  return f.difficulty ? `Wipe at ${f.boss_pct.toFixed(1)}%` : "Not completed";
 }
 
 function showFights() {
@@ -146,7 +153,7 @@ function showFights() {
       type: "button", class: "pick", onclick: () => { state.compare = null; state.player = null; runAnalysis(f.id); },
     },
       h("span", { class: "pick-main" }, `#${f.id} ${fightLabel(f)}`),
-      h("span", { class: "pick-side" }, `${formatTime(f.duration_s)} · ${f.kill ? "Kill" : "Not completed"}`),
+      h("span", { class: "pick-side" }, `${formatTime(f.duration_s)} · ${fightResult(f)}`),
     ))),
   );
 }
@@ -154,15 +161,14 @@ function showFights() {
 function showPlayers(message, players) {
   els.results.hidden = true;
   els.picker.hidden = false;
-  const sorted = [...players].sort((a, b) => Number(b.specs.includes("Blood")) - Number(a.specs.includes("Blood")));
   els.picker.replaceChildren(
     h("h2", { class: "section-title" }, "Who should we look at?"),
     h("p", { class: "section-note" }, message),
-    h("div", { class: "pick-list" }, sorted.map((p) => h("button", {
+    h("div", { class: "pick-list" }, players.map((p) => h("button", {
       type: "button", class: "pick", onclick: () => { state.player = p.name; runAnalysis(state.fight); },
     },
       h("span", { class: "pick-main" }, p.name),
-      h("span", { class: "pick-side" }, p.specs.join("/") || "Unknown spec"),
+      h("span", { class: "pick-side" }, [p.specs.join("/"), (p.class || "").replace(/([a-z])([A-Z])/g, "$1 $2")].filter(Boolean).join(" ") || "Unknown spec"),
     ))),
   );
 }
@@ -233,7 +239,7 @@ function withTip(el, title, lines) {
 function timelineChart(container, a) {
   const width = Math.max(320, container.clientWidth);
   const narrow = width < 560;
-  const labelW = narrow ? 0 : 150;
+  const labelW = narrow ? 0 : 200;
   const rowH = narrow ? 44 : 30;
   const top = 22;
   const right = 12;
@@ -247,7 +253,7 @@ function timelineChart(container, a) {
     if (i % 2 === 0) {
       svg.append(s("rect", { x: x(p.start_s), y: top - 4, width: Math.max(1, x(p.end_s) - x(p.start_s)), height: rows.length * rowH + 4, fill: "var(--band)" }));
     }
-    if (x(p.end_s) - x(p.start_s) > 14) {
+    if (a.section_kind !== "window" && x(p.end_s) - x(p.start_s) > 14) {
       const label = s("text", { x: (x(p.start_s) + x(p.end_s)) / 2, y: 12, "text-anchor": "middle" });
       label.textContent = String(p.id);
       svg.append(label);
@@ -274,7 +280,7 @@ function timelineChart(container, a) {
       }
       return;
     }
-    const color = row.group === "control" ? "var(--series-2)" : "var(--series-1)";
+    const color = { defensive: "var(--series-1)", control: "var(--series-2)", taunt: "var(--series-3)" }[row.group];
     for (const t of row.casts) {
       svg.append(s("circle", { cx: x(t), cy: lineY, r: 4, fill: color, stroke: "var(--surface)", "stroke-width": 2 }));
       svg.append(withTip(s("circle", { cx: x(t), cy: lineY, r: 12 }), row.name, [`Cast at ${formatTime(t)}`]));
@@ -317,7 +323,7 @@ function pullChart(container, a) {
   const y = (v) => baseline - (v / max) * (baseline - top);
   const band = (width - left - right) / a.pulls.length;
   const barW = Math.max(3, Math.min(24, (band - 10) / 2));
-  const svg = s("svg", { viewBox: `0 0 ${width} ${height}`, role: "group", "aria-label": "Damage and healing on the tank per pull" });
+  const svg = s("svg", { viewBox: `0 0 ${width} ${height}`, role: "group", "aria-label": "Damage and healing on the tank over the fight" });
   yAxis(svg, max, left, width - right, y);
 
   a.pulls.forEach((p, i) => {
@@ -330,7 +336,7 @@ function pullChart(container, a) {
       svg.append(label);
     }
     svg.append(withTip(s("rect", { x: left + band * i, y: top, width: band, height: baseline - top }),
-      `Pull ${p.id}: ${p.name}`, [`Damage taken ${compact(p.dtps)}/s`, `Healing received ${compact(p.hps)}/s`]));
+      a.section_kind === "window" ? p.name : `${SECTION_WORDS[a.section_kind][0]} ${p.id}: ${p.name}`, [`Damage taken ${compact(p.dtps)}/s`, `Healing received ${compact(p.hps)}/s`]));
   });
   container.replaceChildren(svg);
 }
@@ -375,7 +381,7 @@ function compareChart(container, cmp, thisLabel, otherLabel) {
       `${thisLabel}: ${i < here.length ? compact(w.damage) : "no data"}`,
       `${otherLabel}: ${i < there.length ? compact(w.other_damage) : "no data"}`,
     ];
-    svg.append(withTip(s("rect", { x: x(i) - step / 2, y: top, width: step, height: baseline - top }), `${w.offset}-${w.offset + 5}s into the pull`, lines));
+    svg.append(withTip(s("rect", { x: x(i) - step / 2, y: top, width: step, height: baseline - top }), `${w.offset}-${w.offset + 5}s in`, lines));
   });
   container.replaceChildren(svg);
 }
@@ -431,20 +437,22 @@ function renderFindings(a) {
 }
 
 function renderTiles(a) {
+  const word = a.section_kind === "window" ? "stretch" : SECTION_WORDS[a.section_kind][1];
   const hardest = a.pulls.reduce((best, p) => (p.dtps > best.dtps ? p : best), a.pulls[0]);
   const tile = (label, value, note) => h("div", { class: "tile" },
     h("div", { class: "tile-label" }, label),
     h("div", { class: "tile-value" }, value),
     h("div", { class: "tile-note" }, note));
   return h("div", { class: "tiles" },
-    tile("Result", a.fight.kill ? "Kill" : "Incomplete", `${formatTime(a.fight.duration_s)} long`),
+    tile("Result", a.fight.kill ? "Kill" : a.fight.difficulty ? "Wipe" : "Incomplete",
+      a.fight.difficulty && !a.fight.kill ? `Boss at ${a.fight.boss_pct.toFixed(1)}%` : `${formatTime(a.fight.duration_s)} long`),
     tile("Deaths", String(a.deaths.length), a.deaths.some((d) => d.is_tank) ? "Including the tank" : "Tank survived"),
     tile("Close calls", String(a.low_hp.length), "Tank below 30% health"),
-    tile("Hardest pull", `${compact(hardest.dtps)}/s`, hardest.name));
+    tile(`Hardest ${word}`, `${compact(hardest.dtps)}/s`, hardest.name));
 }
 
 function renderCompareControl(a) {
-  const options = state.report.fights.filter((f) => f.id !== a.fight.id && f.name === a.fight.name && f.duration_s >= 1);
+  const options = state.report.fights.filter((f) => f.id !== a.fight.id && f.name === a.fight.name && f.difficulty === a.fight.difficulty && f.duration_s >= 1);
   if (!options.length) return null;
   const select = h("select", { "aria-label": "Compare with another fight", onchange: (e) => {
     state.compare = e.target.value ? Number(e.target.value) : null;
@@ -456,13 +464,32 @@ function renderCompareControl(a) {
   return select;
 }
 
+function renderTankControl(a) {
+  if (a.tanks.length < 2) return null;
+  const select = h("select", { "aria-label": "Choose a tank", onchange: (e) => {
+    state.player = e.target.value;
+    state.compare = null;
+    runAnalysis(state.fight);
+  } }, a.tanks.map((t) => h("option", { value: t.name }, t.name)));
+  select.value = a.tank.name;
+  return select;
+}
+
+function renderTanks(a) {
+  if (a.tanks.length < 2) return null;
+  return panel("Tank team", "How the tanks shared the damage. Use the tank menu above to look at another tank.",
+    table([["Tank"], ["Spec"], ["Share", "num"], ["Damage/s", "num"], ["Taunts", "num"], ["Deaths", "num"]],
+      a.tanks.map((t) => [t.name, t.spec, `${t.share.toFixed(1)}%`, compact(t.dtps), String(t.taunts), String(t.deaths)])));
+}
+
 function renderCompare(a) {
   const cmp = a.compare;
   if (!cmp) return null;
   if (cmp.missing) return h("div", { class: "notice" }, cmp.missing);
   const thisLabel = `Fight #${a.fight.id}`;
   const otherLabel = `Fight #${cmp.fight_id}`;
-  return panel(`Same pull, two fights: ${cmp.pull}`, "Damage on the tank per 5 seconds from the start of the pull. Groups may differ between fights.",
+  const word = SECTION_WORDS[a.section_kind][1];
+  return panel(`Same ${a.section_kind === "window" ? "stretch" : word}, two fights: ${cmp.pull}`, `Damage on the tank per 5 seconds from the start of the ${a.section_kind === "window" ? "stretch" : word}. Groups may differ between fights.`,
     addChart((c) => compareChart(c, cmp, thisLabel, otherLabel)),
     legend([[thisLabel, "key-1"], [otherLabel, "key-2"]]),
     h("details", {}, h("summary", {}, "Show as a table"), table(
@@ -475,6 +502,9 @@ function renderResults(a) {
   redrawCharts = [];
   hideTip();
   const key = a.fight.keystone ? ` +${a.fight.keystone}` : "";
+  const word = SECTION_WORDS[a.section_kind];
+  const others = a.group.filter((p) => p.name !== a.tank.name).map((p) => p.name).join(", ");
+  const crew = a.fight.kind === "raid" ? `${a.fight.difficulty} · ${a.group.length} players` : others;
   const copy = h("button", { type: "button", class: "button-ghost", onclick: async (e) => {
     const button = e.currentTarget;
     try {
@@ -492,8 +522,9 @@ function renderResults(a) {
     h("div", { class: "result-head" },
       h("div", {},
         h("h2", {}, `${a.fight.name}${key}`),
-        h("p", { class: "result-sub" }, `${a.tank.name} · ${a.tank.specs.join("/")} · ${a.group.filter((p) => p.name !== a.tank.name).map((p) => p.name).join(", ")}`)),
+        h("p", { class: "result-sub" }, `${a.tank.name} · ${a.tank.label} · ${crew}`)),
       h("div", { class: "result-actions" },
+        renderTankControl(a),
         renderCompareControl(a),
         h("button", { type: "button", class: "button-ghost", onclick: showFights }, "Other fights"),
         copy)),
@@ -501,27 +532,28 @@ function renderResults(a) {
     renderVerdict(a),
     renderTiles(a),
     renderFindings(a),
-    a.cooldowns.length ? panel("Cooldown timeline", "Each dot is a cast. Numbers across the top are pulls.",
+    renderTanks(a),
+    a.cooldowns.length ? panel("Cooldown timeline", a.section_kind === "window" ? "Each dot is a cast." : `Each dot is a cast. Numbers across the top are ${word[1]}s.`,
       addChart((c) => timelineChart(c, a)),
-      legend([["Defensive", "key-1"], ["Crowd control", "key-2"], ["Player death", "key-death"]]),
+      legend([["Defensive", "key-1"], ["Crowd control", "key-2"], a.cooldowns.some((c) => c.group === "taunt") ? ["Taunt", "key-3"] : null, ["Player death", "key-death"]].filter(Boolean)),
       h("details", {}, h("summary", {}, "Show as a table"), table(
         [["Spell"], ["Casts", "num"], ["Times"]],
         a.cooldowns.map((c) => [c.name, String(c.casts.length), c.casts.map(formatTime).join(", ")])))) : null,
     renderCompare(a),
-    panel("Pressure on the tank", "Average damage taken and healing received per second, by pull.",
+    panel("Pressure on the tank", `Average damage taken and healing received per second, by ${word[1]}.`,
       addChart((c) => pullChart(c, a)),
       legend([["Damage taken", "key-1"], ["Healing received", "key-2"]]),
       h("details", {}, h("summary", {}, "Show as a table"), table(
-        [["#"], ["Pull"], ["Time"], ["Damage/s", "num"], ["Healing/s", "num"]],
+        [["#"], [word[0]], ["Time"], ["Damage/s", "num"], ["Healing/s", "num"]],
         a.pulls.map((p) => [String(p.id), p.name, `${formatTime(p.start_s)}-${formatTime(p.end_s)}`, compact(p.dtps), compact(p.hps)])))),
-    panel("Cooldowns at each pull", "Estimated from the shortest gap between uses in this fight. Spells cast fewer than 3 times aren't estimated.",
-      table([["Pull"], ["Rest", "num"], ["On cooldown"], ["Ready, not used"]],
+    a.section_kind !== "window" ? panel(`Cooldowns at each ${word[1]}`, "Estimated from the shortest gap between uses in this fight. Spells cast fewer than 3 times aren't estimated.",
+      table([[word[0]], ["Rest", "num"], ["On cooldown"], ["Ready, not used"]],
         a.pulls.map((p) => [
           `${p.id}. ${p.name}`,
           p.rest_s === null ? "-" : `${Math.round(p.rest_s)}s`,
           p.on_cooldown.map((w) => `${w.name} (${formatTime(w.ready_s)})`).join(", ") || "None",
           p.ready_unused.join(", ") || "None",
-        ]))),
+        ]))) : null,
     a.deaths.length ? panel("Deaths", null,
       table([["Time"], ["Player"], ["Killed by"], ["Last 5 seconds"]],
         a.deaths.map((d) => [formatTime(d.t_s), d.name, d.killed_by, d.recap.map((x) => `${x.ability} ${compact(x.amount)}`).join(", ")]))) : null,

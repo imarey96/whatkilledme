@@ -16,14 +16,13 @@ from flask import Flask, jsonify, request, send_from_directory
 from waitress import serve
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from analyze_blood import AnalysisError, analyze_fight, fight_from_url
-from main import extract_report_code, load_env
-from wcl_client import WCLClient
+from analyze import RAID_DIFFICULTIES, AnalysisError, analyze_fight, fight_from_url
+from wcl_client import WCLClient, extract_report_code, load_env
 
 log = logging.getLogger("whatkilled")
 
 REPORT_CODE_RE = re.compile(r"^(a:)?[A-Za-z0-9]{8,32}$")
-PLAYER_NAME_RE = re.compile(r"^[^\W\d_]{2,12}$")
+MAX_PLAYER_NAME_LENGTH = 40
 CACHE_TTL_S = 15 * 60
 CACHE_MAX_ENTRIES = 200
 # Each uncached analysis spends the app's shared WCL API points
@@ -177,7 +176,9 @@ def get_report():
                 "duration_s": (f["endTime"] - f["startTime"]) / 1000,
                 "kill": bool(f.get("kill")),
                 "keystone": f.get("keystoneLevel"),
-                "encounter": f.get("encounterID", 0) > 0,
+                "difficulty": RAID_DIFFICULTIES.get(f.get("difficulty")),
+                "boss_pct": f.get("fightPercentage") or 0,
+                "encounter": (f.get("encounterID") or 0) > 0,
             }
             for f in report.get("fights") or []
         ]
@@ -201,7 +202,8 @@ def get_analysis():
     if compare == fight:
         compare = None
     player = request.args.get("player") or None
-    if player and not PLAYER_NAME_RE.match(player):
+    # Logs can hold anonymized names, so this only bounds the length
+    if player and len(player) > MAX_PLAYER_NAME_LENGTH:
         return error("That isn't a valid character name.", 400)
 
     key = ("analysis", code, fight, (player or "").lower(), compare)

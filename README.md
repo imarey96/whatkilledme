@@ -1,8 +1,8 @@
 # whatkilled.me
 
-Paste a Warcraft Logs link and see what killed your tank: a plain verdict, pull-by-pull pressure, a cooldown timeline, deaths, and side-by-side attempts.
+Paste a Warcraft Logs link and see what killed your tank: a plain verdict, pressure by pull or phase, a cooldown timeline, deaths, and side-by-side attempts.
 
-Blood Death Knights are supported today, with more tank specs planned.
+Works on Mythic+ and raids for all six tank specs: Blood Death Knight, Vengeance Demon Hunter, Guardian Druid, Brewmaster Monk, Protection Paladin and Protection Warrior. Raid fights are split by boss phase and also show how the tanks shared damage and taunts. What each spec tracks lives in `tanks.py`.
 
 ## Run it
 
@@ -22,7 +22,7 @@ Open http://127.0.0.1:8000.
 The command-line version uses the same engine:
 
 ```bash
-python analyze_blood.py "https://www.warcraftlogs.com/reports/CODE?fight=4" --compare 3
+python analyze.py "https://www.warcraftlogs.com/reports/CODE?fight=4" --compare 3
 ```
 
 ## Hosting on Railway
